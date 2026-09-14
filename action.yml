@@ -99,10 +99,51 @@ runs:
   using: composite
 
   steps:
+    - name: Resolve Builder image
+      id: image
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_OS: ${{ inputs.os }}
+        INPUT_CGO: ${{ inputs.cgo }}
+      run: |
+        set -euo pipefail
+
+        version="$INPUT_VERSION"
+
+        if [[ "$INPUT_OS" == "darwin" && "$INPUT_CGO" == "true" ]]; then
+          version="${version}-macos"
+        fi
+
+        image="coalaura/builder:$version"
+
+        digest="$(
+          docker buildx imagetools inspect "$image" \
+            --format '{{json .Manifest.Digest}}' |
+            tr -d '"'
+        )"
+
+        digest_key="${digest#sha256:}"
+        archive="$RUNNER_TEMP/coalaura-build/images/$digest_key.tar"
+
+        echo "image=$image" >> "$GITHUB_OUTPUT"
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        echo "digest-key=$digest_key" >> "$GITHUB_OUTPUT"
+        echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Builder image
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.image.outputs.archive }}
+        key: coalaura-builder-${{ runner.os }}-${{ steps.image.outputs.digest-key }}
+
     - name: Build
       id: build
       shell: bash
       env:
+        BUILDER_IMAGE: ${{ steps.image.outputs.image }}
+        BUILDER_IMAGE_ARCHIVE: ${{ steps.image.outputs.archive }}
+
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_ARCH: ${{ inputs.arch }}
