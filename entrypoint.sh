@@ -69,23 +69,8 @@ if [[ "$INPUT_LINK" == "dynamic" && "$INPUT_CGO" != "true" ]]; then
     error "dynamic linking requires cgo: true"
 fi
 
-if [[ ! "$INPUT_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    error "invalid version: $INPUT_VERSION"
-fi
-
 base_image="$BUILDER_IMAGE"
 image="$base_image"
-
-mkdir -p "$(dirname "$BUILDER_IMAGE_ARCHIVE")"
-
-if [[ -s "$BUILDER_IMAGE_ARCHIVE" ]]; then
-    echo "Loading cached Builder image: $base_image"
-    docker load --input "$BUILDER_IMAGE_ARCHIVE"
-else
-    echo "Pulling Builder image: $base_image"
-    docker pull "$base_image"
-    docker save --output "$BUILDER_IMAGE_ARCHIVE" "$base_image"
-fi
 
 arguments=(
     build

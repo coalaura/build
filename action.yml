@@ -99,15 +99,24 @@ runs:
   using: composite
 
   steps:
-    - name: Resolve Builder image
-      id: image
+    - name: Resolve Builder
+      id: builder
       shell: bash
       env:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
+        INPUT_ARCH: ${{ inputs.arch }}
         INPUT_CGO: ${{ inputs.cgo }}
+        INPUT_LINK: ${{ inputs.link }}
+        INPUT_OPTIMIZATION: ${{ inputs.optimization }}
+        INPUT_PRE: ${{ inputs.pre }}
       run: |
         set -euo pipefail
+
+        if [[ ! "$INPUT_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+          echo "::error::invalid version: $INPUT_VERSION"
+          exit 1
+        fi
 
         version="$INPUT_VERSION"
 
@@ -119,31 +128,54 @@ runs:
 
         digest="$(
           docker buildx imagetools inspect "$image" \
-            --format '{{json .Manifest.Digest}}' |
-            tr -d '"'
+            --format '{{.Manifest.Digest}}'
         )"
 
         digest_key="${digest#sha256:}"
-        archive="$RUNNER_TEMP/coalaura-build/images/$digest_key.tar"
 
-        echo "image=$image" >> "$GITHUB_OUTPUT"
-        echo "digest=$digest" >> "$GITHUB_OUTPUT"
-        echo "digest-key=$digest_key" >> "$GITHUB_OUTPUT"
-        echo "archive=$archive" >> "$GITHUB_OUTPUT"
+        pre_hash="$(
+          printf '%s' "$INPUT_PRE" |
+            sha256sum |
+            cut -c1-16
+        )"
 
-    - name: Cache Builder image
+        cache_id="$(
+          printf '%s\n' \
+            "$digest_key" \
+            "$INPUT_OS" \
+            "$INPUT_ARCH" \
+            "$INPUT_CGO" \
+            "$INPUT_LINK" \
+            "$INPUT_OPTIMIZATION" \
+            "$pre_hash" |
+            sha256sum |
+            cut -c1-20
+        )"
+
+        echo "image=${image}@${digest}" >> "$GITHUB_OUTPUT"
+        echo "cache-id=$cache_id" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go modules
       uses: actions/cache@v6
       with:
-        path: ${{ steps.image.outputs.archive }}
-        key: coalaura-builder-${{ runner.os }}-${{ steps.image.outputs.digest-key }}
+        path: ${{ runner.temp }}/coalaura-build/go-mod
+        key: coalaura-build-mod-${{ runner.os }}-${{ hashFiles('**/go.mod', '**/go.sum') }}
+        restore-keys: |
+          coalaura-build-mod-${{ runner.os }}-
+
+    - name: Cache Go build
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/coalaura-build/go-build
+        key: coalaura-build-go-${{ runner.os }}-${{ steps.builder.outputs.cache-id }}-${{ hashFiles('**/go.mod', '**/go.sum') }}
+        restore-keys: |
+          coalaura-build-go-${{ runner.os }}-${{ steps.builder.outputs.cache-id }}-
 
     - name: Build
       id: build
       shell: bash
       env:
-        BUILDER_IMAGE: ${{ steps.image.outputs.image }}
-        BUILDER_IMAGE_ARCHIVE: ${{ steps.image.outputs.archive }}
-
+        BUILDER_IMAGE: ${{ steps.builder.outputs.image }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_ARCH: ${{ inputs.arch }}
