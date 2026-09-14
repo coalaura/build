@@ -16,7 +16,7 @@ The action runs the published Builder image directly, so it does not build anoth
     output: build/example
 ```
 
-Builder `v0.4.3` is used by default.
+Builder `latest` is used by default.
 
 ## Matrix builds
 
@@ -58,25 +58,58 @@ The output directory is created automatically when `output` is set. The resolved
 
 ## Inputs
 
-| Input | Default | Description |
-| --- | --- | --- |
-| `builder-version` | `v0.4.3` | `coalaura/builder` Docker image tag |
-| `os` | Builder default | `linux`, `windows` or `darwin` |
-| `arch` | Builder default | Go target architecture, such as `amd64` or `arm64` |
-| `cgo` | `false` | Enable CGO |
-| `link` | `static` | `static` or `dynamic`; dynamic requires CGO |
-| `optimization` | `optimize` | `optimize` or `compatible` |
-| `minify` | `false` | Compress the result with UPX |
-| `generate` | `true` | Run `go generate ./...` |
-| `gui` | `false` | Use the Windows GUI subsystem for Go builds |
-| `package` | | Go package to build |
-| `output` | | Go build output name or path |
-| `target` | | Project or build target |
-| `debug` | `false` | Print commands without executing them |
-| `go-flags` | | Additional Go build flags, one argument per line |
-| `arguments` | | Arguments passed after `--`, one argument per line |
+| Input          | Default         | Description                                                   |
+| -------------- | --------------- | ------------------------------------------------------------- |
+| `version`      | `latest`        | Builder version to use                                        |
+| `os`           | Builder default | `linux`, `windows` or `darwin`                                |
+| `arch`         | Builder default | Go target architecture, such as `amd64` or `arm64`            |
+| `cgo`          | `false`         | Enable CGO                                                    |
+| `link`         | `static`        | `static` or `dynamic`; dynamic requires CGO                   |
+| `optimization` | `optimize`      | `optimize` or `compatible`                                    |
+| `minify`       | `false`         | Compress the result with UPX                                  |
+| `generate`     | `true`          | Run `go generate ./...`                                       |
+| `gui`          | `false`         | Use the Windows GUI subsystem for Go builds                   |
+| `package`      |                 | Go package to build                                           |
+| `output`       |                 | Go build output name or path                                  |
+| `target`       |                 | Project or build target                                       |
+| `debug`        | `false`         | Print commands without executing them                         |
+| `pre`          |                 | Shell script used to extend the Builder image before building |
+| `go-flags`     |                 | Additional Go build flags, one argument per line              |
+| `arguments`    |                 | Arguments passed after `--`, one argument per line            |
 
 Signing is intentionally not exposed. Use `coalaura/sign` separately when signing is required.
+
+### Pre-build image setup
+
+`pre` can extend the Builder image with additional build dependencies before the project is built. The script runs as root while preparing a temporary image, before the project workspace is mounted.
+
+For example, a project that requires CMake, Ninja and pkg-config can install them without adding those packages to the base Builder image:
+
+```yaml
+- uses: coalaura/build@v1
+  with:
+    cgo: true
+    pre: |
+      apk add --no-cache cmake ninja pkgconf
+```
+
+The selected Builder image remains the base for the temporary image. Darwin CGO builds therefore retain the macOS SDK while also receiving any packages installed by `pre`.
+
+`pre` is intended for image setup such as installing packages and system tools. Commands that operate on the checked-out project should instead be run as a separate workflow step.
+
+## Version
+
+The Action and Builder are versioned independently:
+
+```yaml
+- uses: coalaura/build@v1
+  with:
+    version: v0.4.5
+```
+
+The Action selects the corresponding `coalaura/builder` image automatically. Darwin CGO builds use the macOS SDK variant of the same Builder version.
+
+Changing the Builder version does not require changing the Action version.
 
 ### Go flags
 
@@ -122,18 +155,6 @@ Builder uses Zig for supported CGO cross-compilation. For example:
 ```
 
 Dynamic linking requires `cgo: true`.
-
-## Builder version
-
-The Action and Builder are versioned independently:
-
-```yaml
-- uses: coalaura/build@v1
-  with:
-    builder-version: v0.4.3
-```
-
-The Action pulls and runs `coalaura/builder:<builder-version>` directly. Changing the Builder version does not rebuild the Action.
 
 ## Outputs
 
