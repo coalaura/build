@@ -69,90 +69,18 @@ if [[ "$INPUT_LINK" == "dynamic" && "$INPUT_CGO" != "true" ]]; then
     error "dynamic linking requires cgo: true"
 fi
 
-if [[ ! "$INPUT_BUILDER_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    error "invalid builder version: $INPUT_BUILDER_VERSION"
+if [[ ! "$INPUT_VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    error "invalid version: $INPUT_VERSION"
 fi
 
-image="coalaura/builder:$INPUT_BUILDER_VERSION"
+version="$INPUT_VERSION"
 
-arguments=(
-    build
-    go
-    "$INPUT_OS"
-    --arch
-    "$INPUT_ARCH"
-)
-
-if [[ "$INPUT_CGO" == "true" ]]; then
-    arguments+=(--cgo)
-else
-    arguments+=(--pure)
+if [[ "$INPUT_OS" == "darwin" && "$INPUT_CGO" == "true" ]]; then
+    version="${version}-macos"
 fi
 
-case "$INPUT_LINK" in
-    static)
-        arguments+=(--static)
-        ;;
-    dynamic)
-        arguments+=(--dynamic)
-        ;;
-esac
-
-case "$INPUT_OPTIMIZATION" in
-    optimize)
-        arguments+=(--optimize)
-        ;;
-    compatible)
-        arguments+=(--compatible)
-        ;;
-esac
-
-if [[ "$INPUT_MINIFY" == "true" ]]; then
-    arguments+=(--minify)
-else
-    arguments+=(--no-minify)
-fi
-
-if [[ "$INPUT_GENERATE" == "true" ]]; then
-    arguments+=(--generate)
-else
-    arguments+=(--no-generate)
-fi
-
-if [[ "$INPUT_GUI" == "true" ]]; then
-    arguments+=(--gui)
-fi
-
-if [[ -n "$INPUT_PACKAGE" ]]; then
-    arguments+=(--package "$INPUT_PACKAGE")
-fi
-
-if [[ -n "$INPUT_OUTPUT" ]]; then
-    output="$INPUT_OUTPUT"
-
-    if [[ "$output" != /* ]]; then
-        output="$GITHUB_WORKSPACE/$output"
-    fi
-
-    mkdir -p "$(dirname "$output")"
-
-    arguments+=(--output "$output")
-fi
-
-if [[ "$INPUT_DEBUG" == "true" ]]; then
-    arguments+=(--debug)
-fi
-
-append_lines "$INPUT_GO_FLAGS" arguments
-
-if [[ -n "$INPUT_TARGET" ]]; then
-    arguments+=("$INPUT_TARGET")
-fi
-
-if [[ -n "$INPUT_ARGUMENTS" ]]; then
-    arguments+=(--)
-    append_lines "$INPUT_ARGUMENTS" arguments
-fi
+base_image="coalaura/builder:$version"
+image="$base_image"
 
 cache_root="$RUNNER_TEMP/coalaura-build"
 home="$cache_root/home"
@@ -163,6 +91,37 @@ mkdir -p \
     "$home" \
     "$go_cache" \
     "$go_mod_cache"
+
+if [[ -n "${INPUT_PRE//[[:space:]]/}" ]]; then
+    pre_hash="$(
+        printf '%s\n%s' "$base_image" "$INPUT_PRE" |
+            sha256sum |
+            cut -c1-16
+    )"
+
+    pre_context="$cache_root/pre-$pre_hash"
+    image="coalaura-builder-pre:$pre_hash"
+
+    mkdir -p "$pre_context"
+
+    printf '%s\n' "$INPUT_PRE" > "$pre_context/pre.sh"
+
+    cat > "$pre_context/Dockerfile" <<'EOF'
+ARG BASE_IMAGE
+
+FROM ${BASE_IMAGE}
+
+COPY pre.sh /tmp/coalaura-pre.sh
+
+RUN bash -e /tmp/coalaura-pre.sh \
+ && rm /tmp/coalaura-pre.sh
+EOF
+
+    docker build \
+        --build-arg "BASE_IMAGE=$base_image" \
+        --tag "$image" \
+        "$pre_context"
+fi
 
 docker run \
     --rm \

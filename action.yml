@@ -8,10 +8,10 @@ branding:
   color: blue
 
 inputs:
-  builder-version:
-    description: Version of coalaura/builder to use
+  version:
+    description: Builder version to use
     required: false
-    default: v0.4.3
+    default: latest
 
   os:
     description: Target operating system
@@ -70,6 +70,10 @@ inputs:
     required: false
     default: "false"
 
+  pre:
+    description: Shell script used to extend the builder image before building
+    required: false
+
   go-flags:
     description: Additional Go build flags, one argument per line
     required: false
@@ -99,7 +103,7 @@ runs:
       id: build
       shell: bash
       env:
-        INPUT_BUILDER_VERSION: ${{ inputs.builder-version }}
+        INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_ARCH: ${{ inputs.arch }}
         INPUT_CGO: ${{ inputs.cgo }}
@@ -112,6 +116,7 @@ runs:
         INPUT_OUTPUT: ${{ inputs.output }}
         INPUT_TARGET: ${{ inputs.target }}
         INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_PRE: ${{ inputs.pre }}
         INPUT_GO_FLAGS: ${{ inputs.go-flags }}
         INPUT_ARGUMENTS: ${{ inputs.arguments }}
       run: bash "$GITHUB_ACTION_PATH/entrypoint.sh"
