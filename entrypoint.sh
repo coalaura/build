@@ -82,6 +82,87 @@ fi
 base_image="coalaura/builder:$version"
 image="$base_image"
 
+arguments=(
+    build
+    go
+    "$INPUT_OS"
+    --arch
+    "$INPUT_ARCH"
+)
+
+if [[ "$INPUT_CGO" == "true" ]]; then
+    arguments+=(--cgo)
+else
+    arguments+=(--pure)
+fi
+
+case "$INPUT_LINK" in
+    static)
+        arguments+=(--static)
+        ;;
+    dynamic)
+        arguments+=(--dynamic)
+        ;;
+esac
+
+case "$INPUT_OPTIMIZATION" in
+    optimize)
+        arguments+=(--optimize)
+        ;;
+    compatible)
+        arguments+=(--compatible)
+        ;;
+esac
+
+if [[ "$INPUT_MINIFY" == "true" ]]; then
+    arguments+=(--minify)
+else
+    arguments+=(--no-minify)
+fi
+
+if [[ "$INPUT_GENERATE" == "true" ]]; then
+    arguments+=(--generate)
+else
+    arguments+=(--no-generate)
+fi
+
+if [[ "$INPUT_GUI" == "true" ]]; then
+    arguments+=(--gui)
+fi
+
+if [[ -n "$INPUT_PACKAGE" ]]; then
+    arguments+=(--package "$INPUT_PACKAGE")
+fi
+
+output=""
+
+if [[ -n "$INPUT_OUTPUT" ]]; then
+    output="$INPUT_OUTPUT"
+
+    if [[ "$output" != /* ]]; then
+        output="$GITHUB_WORKSPACE/$output"
+    fi
+
+    mkdir -p "$(dirname "$output")"
+
+    arguments+=(--output "$output")
+fi
+
+if [[ "$INPUT_DEBUG" == "true" ]]; then
+    arguments+=(--debug)
+fi
+
+append_lines "$INPUT_GO_FLAGS" arguments
+
+if [[ -n "$INPUT_TARGET" ]]; then
+    arguments+=("$INPUT_TARGET")
+fi
+
+if [[ -n "$INPUT_ARGUMENTS" ]]; then
+    arguments+=(--)
+    append_lines "$INPUT_ARGUMENTS" arguments
+fi
+
 cache_root="$RUNNER_TEMP/coalaura-build"
 home="$cache_root/home"
 go_cache="$cache_root/go-build"
@@ -139,7 +220,7 @@ docker run \
 
 echo "image=$image" >> "$GITHUB_OUTPUT"
 
-if [[ -n "$INPUT_OUTPUT" && "$INPUT_DEBUG" != "true" ]]; then
+if [[ -n "$output" && "$INPUT_DEBUG" != "true" ]]; then
     echo "path=$output" >> "$GITHUB_OUTPUT"
     echo "filename=$(basename "$output")" >> "$GITHUB_OUTPUT"
 fi
