@@ -31,11 +31,96 @@ append_lines() {
     done <<< "$value"
 }
 
+trim() {
+    local value="$1"
+
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+
+    printf '%s' "$value"
+}
+
+add_host_mapping() {
+    local hostname="$1"
+    local line=""
+    local address=""
+    local aliases=""
+    local alias=""
+    local mapping=""
+
+    if [[ ! -f /etc/hosts ]]; then
+        return
+    fi
+
+    while IFS= read -r line; do
+        line="${line%%#*}"
+
+        read -r address aliases <<< "$line" || true
+
+        if [[ -z "$address" || -z "$aliases" ]]; then
+            continue
+        fi
+
+        for alias in $aliases; do
+            if [[ "$alias" != "$hostname" ]]; then
+                continue
+            fi
+
+            mapping="$hostname=$address"
+
+            if [[ -n "${forwarded_host_mappings[$mapping]:-}" ]]; then
+                return
+            fi
+
+            docker_arguments+=(--add-host "$mapping")
+            forwarded_host_mappings["$mapping"]=1
+
+            if [[ "$address" == 127.* || "$address" == "::1" ]]; then
+                use_host_network=true
+            fi
+
+            return
+        done
+    done < /etc/hosts
+}
+
+add_host_mappings_from_value() {
+    local value="$1"
+    local candidates=""
+    local candidate=""
+    local hostname=""
+
+    candidates="${value//,/ }"
+    candidates="${candidates//|/ }"
+
+    for candidate in $candidates; do
+        if [[ "$candidate" =~ ^[A-Za-z][A-Za-z0-9+.-]*://(\[[^]]+\]|[^/:]+) ]]; then
+            hostname="${BASH_REMATCH[1]}"
+            hostname="${hostname#[}"
+            hostname="${hostname%]}"
+
+            add_host_mapping "$hostname"
+        fi
+    done
+}
+
+forward_environment_variable() {
+    local name="$1"
+
+    if [[ ! -v "$name" ]]; then
+        return
+    fi
+
+    docker_arguments+=(--env "$name")
+    add_host_mappings_from_value "${!name}"
+}
+
 validate_bool "cgo" "$INPUT_CGO"
 validate_bool "minify" "$INPUT_MINIFY"
 validate_bool "generate" "$INPUT_GENERATE"
 validate_bool "gui" "$INPUT_GUI"
 validate_bool "debug" "$INPUT_DEBUG"
+validate_bool "external-go-cache" "$USE_EXTERNAL_GO_CACHE"
 
 case "$INPUT_OS" in
     linux|windows|darwin)
@@ -194,17 +279,85 @@ EOF
         "$pre_context"
 fi
 
+docker_arguments=(
+    --rm
+    --user "$(id -u):$(id -g)"
+    --env HOME=/tmp/coalaura-home
+    --env GOCACHE=/tmp/coalaura-go-build
+    --env GOMODCACHE=/tmp/coalaura-go-mod
+    --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE"
+    --volume "$home:/tmp/coalaura-home"
+    --volume "$go_cache:/tmp/coalaura-go-build"
+    --volume "$go_mod_cache:/tmp/coalaura-go-mod"
+    --workdir "$GITHUB_WORKSPACE"
+)
+
+declare -A forwarded_host_mappings=()
+
+use_host_network=false
+
+forwarded_environment=(
+    # External Go build cache.
+    BUILD_CACHE_URL
+
+    # Go module fetching / verification.
+    GOPROXY
+    GONOPROXY
+    GONOSUMDB
+    GOPRIVATE
+    GOSUMDB
+    GOINSECURE
+    GOVCS
+
+    # Builder explicitly supports inheriting this.
+    GOEXPERIMENT
+
+    # Generic network proxies.
+    HTTP_PROXY
+    HTTPS_PROXY
+    NO_PROXY
+    ALL_PROXY
+    FTP_PROXY
+
+    http_proxy
+    https_proxy
+    no_proxy
+    all_proxy
+    ftp_proxy
+)
+
+for name in "${forwarded_environment[@]}"; do
+    forward_environment_variable "$name"
+done
+
+if [[ "$USE_EXTERNAL_GO_CACHE" == "true" ]]; then
+    cache_program="${GOCACHEPROG%%[[:space:]]*}"
+    cache_program_arguments="${GOCACHEPROG#"$cache_program"}"
+
+    if [[ "$cache_program" == /* ]]; then
+        cache_program_path="$cache_program"
+    else
+        cache_program_path="$(command -v "$cache_program" || true)"
+    fi
+
+    if [[ -z "$cache_program_path" || ! -x "$cache_program_path" ]]; then
+        error "GOCACHEPROG executable is not available on the runner: $cache_program"
+    fi
+
+    cache_program_container=/tmp/coalaura-gocacheprog
+
+    docker_arguments+=(
+        --volume "$cache_program_path:$cache_program_container:ro"
+        --env "GOCACHEPROG=$cache_program_container$cache_program_arguments"
+    )
+fi
+
+if [[ "$use_host_network" == "true" ]]; then
+    docker_arguments+=(--network host)
+fi
+
 docker run \
-    --rm \
-    --user "$(id -u):$(id -g)" \
-    --env HOME=/tmp/coalaura-home \
-    --env GOCACHE=/tmp/coalaura-go-build \
-    --env GOMODCACHE=/tmp/coalaura-go-mod \
-    --volume "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" \
-    --volume "$home:/tmp/coalaura-home" \
-    --volume "$go_cache:/tmp/coalaura-go-build" \
-    --volume "$go_mod_cache:/tmp/coalaura-go-mod" \
-    --workdir "$GITHUB_WORKSPACE" \
+    "${docker_arguments[@]}" \
     "$image" \
     "${arguments[@]}"
 

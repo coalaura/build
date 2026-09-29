@@ -155,6 +155,33 @@ runs:
         echo "image=${image}@${digest}" >> "$GITHUB_OUTPUT"
         echo "cache-id=$cache_id" >> "$GITHUB_OUTPUT"
 
+    - name: Resolve Go Cache
+      id: go-cache
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        if [[ -z "${GOCACHEPROG:-}" ]]; then
+          echo "external=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        cache_program="${GOCACHEPROG%%[[:space:]]*}"
+
+        if [[ "$cache_program" == /* ]]; then
+          cache_program_path="$cache_program"
+        else
+          cache_program_path="$(command -v "$cache_program" || true)"
+        fi
+
+        if [[ -z "$cache_program_path" || ! -x "$cache_program_path" ]]; then
+          echo "::warning::GOCACHEPROG is set, but its executable is unavailable: $cache_program"
+          echo "external=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        echo "external=true" >> "$GITHUB_OUTPUT"
+
     - name: Cache Go modules
       uses: actions/cache@v6
       with:
@@ -164,6 +191,7 @@ runs:
           coalaura-build-mod-${{ runner.os }}-
 
     - name: Cache Go build
+      if: steps.go-cache.outputs.external != 'true'
       uses: actions/cache@v6
       with:
         path: ${{ runner.temp }}/coalaura-build/go-build
@@ -176,6 +204,7 @@ runs:
       shell: bash
       env:
         BUILDER_IMAGE: ${{ steps.builder.outputs.image }}
+        USE_EXTERNAL_GO_CACHE: ${{ steps.go-cache.outputs.external }}
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_ARCH: ${{ inputs.arch }}
