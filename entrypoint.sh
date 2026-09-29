@@ -31,15 +31,6 @@ append_lines() {
     done <<< "$value"
 }
 
-trim() {
-    local value="$1"
-
-    value="${value#"${value%%[![:space:]]*}"}"
-    value="${value%"${value##*[![:space:]]}"}"
-
-    printf '%s' "$value"
-}
-
 add_host_mapping() {
     local hostname="$1"
     local line=""
@@ -88,17 +79,29 @@ add_host_mappings_from_value() {
     local value="$1"
     local candidates=""
     local candidate=""
+    local authority=""
     local hostname=""
 
     candidates="${value//,/ }"
     candidates="${candidates//|/ }"
 
     for candidate in $candidates; do
-        if [[ "$candidate" =~ ^[A-Za-z][A-Za-z0-9+.-]*://(\[[^]]+\]|[^/:]+) ]]; then
-            hostname="${BASH_REMATCH[1]}"
-            hostname="${hostname#[}"
-            hostname="${hostname%]}"
+        if [[ ! "$candidate" =~ ^[A-Za-z][A-Za-z0-9+.-]*:// ]]; then
+            continue
+        fi
 
+        authority="${candidate#*://}"
+        authority="${authority%%/*}"
+        authority="${authority##*@}"
+
+        if [[ "$authority" == \[*\]* ]]; then
+            hostname="${authority%%]*}"
+            hostname="${hostname#[}"
+        else
+            hostname="${authority%%:*}"
+        fi
+
+        if [[ -n "$hostname" ]]; then
             add_host_mapping "$hostname"
         fi
     done
