@@ -63,6 +63,7 @@ The output directory is created automatically when `output` is set. The resolved
 | `version`      | `latest`        | Builder version to use                                        |
 | `os`           | Builder default | `linux`, `windows` or `darwin`                                |
 | `arch`         | Builder default | Go target architecture, such as `amd64` or `arm64`            |
+| `pace`         | `false`         | Compile with `pace` instead of `go`; requires Builder v0.5.1+ |
 | `cgo`          | `false`         | Enable CGO                                                    |
 | `link`         | `static`        | `static` or `dynamic`; dynamic requires CGO                   |
 | `optimization` | `optimize`      | `optimize` or `compatible`                                    |
@@ -78,6 +79,19 @@ The output directory is created automatically when `output` is set. The resolved
 | `arguments`    |                 | Arguments passed after `--`, one argument per line            |
 
 Signing is intentionally not exposed. Use `coalaura/sign` separately when signing is required.
+
+### PACE
+
+Set `pace: true` to compile with `pace` instead of `go`. The Builder image already includes PACE and the action enables it with Builder's `--pace` flag. This requires Builder `v0.5.1` or later or the default `latest`.
+
+```yaml
+- uses: coalaura/build@v1
+  with:
+    pace: true
+    output: build/example
+```
+
+With `pace: false` (the default), Builder continues to use `go`.
 
 ### Pre-build image setup
 

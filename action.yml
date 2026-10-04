@@ -23,6 +23,11 @@ inputs:
     required: false
     default: amd64
 
+  pace:
+    description: Use pace instead of go for compilation (requires Builder v0.5.1 or later, or latest)
+    required: false
+    default: "false"
+
   cgo:
     description: Enable CGO
     required: false
@@ -106,6 +111,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_ARCH: ${{ inputs.arch }}
+        INPUT_PACE: ${{ inputs.pace }}
         INPUT_CGO: ${{ inputs.cgo }}
         INPUT_LINK: ${{ inputs.link }}
         INPUT_OPTIMIZATION: ${{ inputs.optimization }}
@@ -144,6 +150,7 @@ runs:
             "$digest_key" \
             "$INPUT_OS" \
             "$INPUT_ARCH" \
+            "$INPUT_PACE" \
             "$INPUT_CGO" \
             "$INPUT_LINK" \
             "$INPUT_OPTIMIZATION" \
@@ -208,6 +215,7 @@ runs:
         INPUT_VERSION: ${{ inputs.version }}
         INPUT_OS: ${{ inputs.os }}
         INPUT_ARCH: ${{ inputs.arch }}
+        INPUT_PACE: ${{ inputs.pace }}
         INPUT_CGO: ${{ inputs.cgo }}
         INPUT_LINK: ${{ inputs.link }}
         INPUT_OPTIMIZATION: ${{ inputs.optimization }}

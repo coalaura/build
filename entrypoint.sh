@@ -118,6 +118,7 @@ forward_environment_variable() {
     add_host_mappings_from_value "${!name}"
 }
 
+validate_bool "pace" "$INPUT_PACE"
 validate_bool "cgo" "$INPUT_CGO"
 validate_bool "minify" "$INPUT_MINIFY"
 validate_bool "generate" "$INPUT_GENERATE"
@@ -167,6 +168,10 @@ arguments=(
     --arch
     "$INPUT_ARCH"
 )
+
+if [[ "$INPUT_PACE" == "true" ]]; then
+    arguments+=(--pace)
+fi
 
 if [[ "$INPUT_CGO" == "true" ]]; then
     arguments+=(--cgo)
