@@ -146,6 +146,14 @@ case "$INPUT_LINK" in
         ;;
 esac
 
+case "$INPUT_LIBC" in
+    auto|musl|gnu)
+        ;;
+    *)
+        error "libc must be auto, musl, or gnu"
+        ;;
+esac
+
 case "$INPUT_OPTIMIZATION" in
     optimize|compatible)
         ;;
@@ -156,6 +164,16 @@ esac
 
 if [[ "$INPUT_LINK" == "dynamic" && "$INPUT_CGO" != "true" ]]; then
     error "dynamic linking requires cgo: true"
+fi
+
+if [[ "$INPUT_LIBC" != "auto" ]]; then
+    if [[ "$INPUT_CGO" != "true" ]]; then
+        error "libc: $INPUT_LIBC requires cgo: true"
+    fi
+
+    if [[ "$INPUT_OS" != "linux" ]]; then
+        error "libc: $INPUT_LIBC requires os: linux"
+    fi
 fi
 
 base_image="$BUILDER_IMAGE"
@@ -185,6 +203,15 @@ case "$INPUT_LINK" in
         ;;
     dynamic)
         arguments+=(--dynamic)
+        ;;
+esac
+
+case "$INPUT_LIBC" in
+    musl)
+        arguments+=(--musl)
+        ;;
+    gnu)
+        arguments+=(--gnu)
         ;;
 esac
 

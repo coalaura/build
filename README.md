@@ -66,6 +66,7 @@ The output directory is created automatically when `output` is set. The resolved
 | `pace`         | `false`         | Compile with `pace` instead of `go`; requires Builder v0.5.1+ |
 | `cgo`          | `false`         | Enable CGO                                                    |
 | `link`         | `static`        | `static` or `dynamic`; dynamic requires CGO                   |
+| `libc`         | `auto`          | `auto`, `musl`, or `gnu`; explicit choices require Linux and CGO |
 | `optimization` | `optimize`      | `optimize` or `compatible`                                    |
 | `minify`       | `false`         | Compress the result with UPX                                  |
 | `generate`     | `true`          | Run `go generate ./...`                                       |
@@ -169,6 +170,21 @@ Builder uses Zig for supported CGO cross-compilation. For example:
 ```
 
 Dynamic linking requires `cgo: true`.
+
+For Linux CGO builds, `libc: auto` (the default) lets Builder select musl for static linking and GNU/glibc for dynamic linking. Set `libc: musl` or `libc: gnu` to pass Builder's `--musl` or `--gnu` override independently of `link`. Explicit libc selection requires `os: linux` and `cgo: true`.
+
+For example, to dynamically link against musl:
+
+```yaml
+- uses: coalaura/build@v1
+  with:
+    os: linux
+    cgo: true
+    link: dynamic
+    libc: musl
+```
+
+Native dependencies must match the selected libc. Zig's bundled glibc supports dynamic linking only; `link: static` with `libc: gnu` requires an external static glibc toolchain. These defaults and overrides require a Builder image containing the libc-selection update; older pinned images retain their previous behavior and do not support the new flags.
 
 ## Outputs
 

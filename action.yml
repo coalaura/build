@@ -38,6 +38,11 @@ inputs:
     required: false
     default: static
 
+  libc:
+    description: Linux CGO libc (auto, musl, or gnu; auto selects musl for static and gnu for dynamic)
+    required: false
+    default: auto
+
   optimization:
     description: Build mode (optimize or compatible)
     required: false
@@ -114,6 +119,7 @@ runs:
         INPUT_PACE: ${{ inputs.pace }}
         INPUT_CGO: ${{ inputs.cgo }}
         INPUT_LINK: ${{ inputs.link }}
+        INPUT_LIBC: ${{ inputs.libc }}
         INPUT_OPTIMIZATION: ${{ inputs.optimization }}
         INPUT_PRE: ${{ inputs.pre }}
       run: |
@@ -153,6 +159,7 @@ runs:
             "$INPUT_PACE" \
             "$INPUT_CGO" \
             "$INPUT_LINK" \
+            "$INPUT_LIBC" \
             "$INPUT_OPTIMIZATION" \
             "$pre_hash" |
             sha256sum |
@@ -218,6 +225,7 @@ runs:
         INPUT_PACE: ${{ inputs.pace }}
         INPUT_CGO: ${{ inputs.cgo }}
         INPUT_LINK: ${{ inputs.link }}
+        INPUT_LIBC: ${{ inputs.libc }}
         INPUT_OPTIMIZATION: ${{ inputs.optimization }}
         INPUT_MINIFY: ${{ inputs.minify }}
         INPUT_GENERATE: ${{ inputs.generate }}
