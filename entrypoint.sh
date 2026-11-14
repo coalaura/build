@@ -283,6 +283,19 @@ mkdir -p \
     "$go_cache" \
     "$go_mod_cache"
 
+version_check=""
+
+if [[ "$INPUT_VERSION" != "latest" && "$INPUT_DEBUG" != "true" ]]; then
+    version_check="$(mktemp -d "$cache_root/version-check.XXXXXX")"
+    trap 'rm -rf "$version_check"' EXIT
+
+    (
+        curl --fail --silent --location --connect-timeout 1 --max-time 2 \
+            'https://go.dev/dl/?mode=json' > "$version_check/releases.json" 2>/dev/null || true
+    ) &
+    version_check_pid=$!
+fi
+
 if [[ -n "${INPUT_PRE//[[:space:]]/}" ]]; then
     pre_hash="$(
         printf '%s\n%s' "$base_image" "$INPUT_PRE" |
@@ -391,10 +404,26 @@ if [[ "$use_host_network" == "true" ]]; then
     docker_arguments+=(--network host)
 fi
 
+if [[ -n "$version_check" ]]; then
+    docker_arguments+=(
+        --volume "$version_check:/tmp/version-check"
+        --volume "$GITHUB_ACTION_PATH/build-with-version.sh:/tmp/coalaura-build-with-version.sh:ro"
+        --env "BUILDER_CHECK_TARGET=$INPUT_TARGET"
+        --env "BUILDER_CHECK_PACE=$INPUT_PACE"
+        --entrypoint bash
+    )
+    arguments=(/tmp/coalaura-build-with-version.sh "${arguments[@]}")
+fi
+
 docker run \
     "${docker_arguments[@]}" \
     "$image" \
     "${arguments[@]}"
+
+if [[ -n "$version_check" ]]; then
+    wait "$version_check_pid" || true
+    bash "$GITHUB_ACTION_PATH/check-go-version.sh" "$version_check" || true
+fi
 
 echo "image=$image" >> "$GITHUB_OUTPUT"
 
